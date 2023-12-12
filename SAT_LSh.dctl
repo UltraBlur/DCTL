@@ -1,20 +1,17 @@
 // @UltraBlur
 DEFINE_UI_PARAMS(global_sat, Global Saturation, DCTLUI_CHECK_BOX, 1)
 DEFINE_UI_PARAMS(direction, Direction, DCTLUI_COMBO_BOX, 0, {CIE_1976_LUV, ZCAM_JzAzBz},{CIE_1976_LUV, ZCAM_JzAzBz})
-DEFINE_UI_PARAMS(saturation_all, Saturation, DCTLUI_SLIDER_FLOAT, 0.5, 0.0, 1.0, 0.0001)
-DEFINE_UI_PARAMS(saturation_r, Saturation R, DCTLUI_SLIDER_FLOAT, 0.5, 0.0, 1.0, 0.0001)
-DEFINE_UI_PARAMS(saturation_g, Saturation G, DCTLUI_SLIDER_FLOAT, 0.5, 0.0, 1.0, 0.0001)
-DEFINE_UI_PARAMS(saturation_b, Saturation B, DCTLUI_SLIDER_FLOAT, 0.5, 0.0, 1.0, 0.0001)
-DEFINE_UI_PARAMS(saturation_y, Saturation Y, DCTLUI_SLIDER_FLOAT, 0.5, 0.0, 1.0, 0.0001)
+DEFINE_UI_PARAMS(white_point_x, White Point x, DCTLUI_SLIDER_FLOAT, 0.31271, 0.25, 0.5, 0.0001)
+DEFINE_UI_PARAMS(white_point_y, White Point y, DCTLUI_SLIDER_FLOAT, 0.32902, 0.25, 0.5, 0.0001)
+DEFINE_UI_PARAMS(white_point_luminance, White Point Luminance, DCTLUI_SLIDER_FLOAT, 100.0, 48, 10009, 1)
+DEFINE_UI_PARAMS(saturation_all, Saturation, DCTLUI_SLIDER_FLOAT, 0.5, 0.0, 1.5, 0.0001)
+// DEFINE_UI_PARAMS(saturation_r, Saturation R, DCTLUI_SLIDER_FLOAT, 0.5, 0.0, 1.0, 0.0001)
+// DEFINE_UI_PARAMS(saturation_g, Saturation G, DCTLUI_SLIDER_FLOAT, 0.5, 0.0, 1.0, 0.0001)
+// DEFINE_UI_PARAMS(saturation_b, Saturation B, DCTLUI_SLIDER_FLOAT, 0.5, 0.0, 1.0, 0.0001)
+// DEFINE_UI_PARAMS(saturation_y, Saturation Y, DCTLUI_SLIDER_FLOAT, 0.5, 0.0, 1.0, 0.0001)
 
 
 #define PI (3.14159265358979)
-#define white_point_x (0.31271)
-#define white_point_y (0.32902)
-#define WHITE_SCALE (100.0)
-#define white_point_luminance (100.0)
-#define SAT_SCALE (10.0)
-
 //===================================================
 //  CIE_1976_LUV：XYZ->LUV->LCH->LSH->LCH->LUV->XYZ
 //===================================================
@@ -123,22 +120,109 @@ __DEVICE__ float3 lsh_to_lch(float3 lsh) {
 //  ZCAM_JzAzBz:
 //===================================================
 
+typedef struct {
+float3 r0, r1, r2;
+} mat3;
 
+__CONSTANT__ float c1  = 0.8359375f;
+__CONSTANT__ float c2  = 18.8515625f;
+__CONSTANT__ float c3  = 18.6875f;
+__CONSTANT__ float cb  = 1.15f;
+__CONSTANT__ float cg  = 0.66f;
+__CONSTANT__ float eta = 0.1593017578125f;
+__CONSTANT__ float rho = 134.034375f;
+__CONSTANT__ float epsilon = 3.703522621e-11f;
 
+__CONSTANT__ mat3 ZCAM_XYZ_to_LMS = { {0.41478972f, 0.579999f, 0.014648f}, {-0.20151f, 1.120649f, 0.0531008f}, {-0.0166008f, 0.2648f, 0.6684799f} };
 
+#ifdef DEVICE_IS_OPENCL
+__CONSTANT__ mat3 ZCAM_LMS_to_Izazbz = { {0.0f, 0.9999999999629647f, 0.0f}, {3.524f, -4.066708f, 0.542708f}, {0.199076f, 1.096799f, -1.295875f} };
+#endif
 
+#ifdef DEVICE_IS_CUDA
+__CONSTANT__ mat3 ZCAM_LMS_to_Izazbz = { {0.0f, 1.0f - 3.703522621e-11f, 0.0f}, {3.524f, -4.066708f, 0.542708f}, {0.199076f, 1.096799f, -1.295875f} };
+#endif
 
+#ifdef DEVICE_IS_METAL
+__CONSTANT__ mat3 ZCAM_LMS_to_Izazbz = { {0.0f, 1.0f - epsilon, 0.0f}, {3.524f, -4.066708f, 0.542708f}, {0.199076f, 1.096799f, -1.295875f} };
+#endif
+
+__DEVICE__ float3 vector_dot( mat3 m, float3 v)
+{
+    float3 result;
+
+    result.x = m.r0.x * v.x + m.r0.y * v.y + m.r0.z * v.z;
+    result.y = m.r1.x * v.x + m.r1.y * v.y + m.r1.z * v.z;
+    result.z = m.r2.x * v.x + m.r2.y * v.y + m.r2.z * v.z;
+
+    return result;
+}
+
+__DEVICE__  mat3 invert( mat3 m)
+{
+    float det = m.r0.x * (m.r1.y * m.r2.z - m.r2.y * m.r1.z) - m.r0.y * (m.r1.x * m.r2.z - m.r1.z * m.r2.x) + m.r0.z * (m.r1.x * m.r2.y - m.r1.y * m.r2.x);
+    float invdet = 1.0f / det;
+    mat3 minv;
+    minv.r0.x = (m.r1.y * m.r2.z - m.r2.y * m.r1.z) * invdet;
+    minv.r0.y = (m.r0.z * m.r2.y - m.r0.y * m.r2.z) * invdet;
+    minv.r0.z = (m.r0.y * m.r1.z - m.r0.z * m.r1.y) * invdet;
+    minv.r1.x = (m.r1.z * m.r2.x - m.r1.x * m.r2.z) * invdet;
+    minv.r1.y = (m.r0.x * m.r2.z - m.r0.z * m.r2.x) * invdet;
+    minv.r1.z = (m.r1.x * m.r0.z - m.r0.x * m.r1.z) * invdet;
+    minv.r2.x = (m.r1.x * m.r2.y - m.r2.x * m.r1.y) * invdet;
+    minv.r2.y = (m.r2.x * m.r0.y - m.r0.x * m.r2.y) * invdet;
+    minv.r2.z = (m.r0.x * m.r1.y - m.r1.x * m.r0.y) * invdet;
+    return minv;
+}
+
+__DEVICE__ float lin_to_ZCAMPQ(float x)
+{
+    return _powf( ( c1 + c2 * _powf((x/10000.0f),eta) ) / ( 1.0f + c3 * _powf((x/10000.0f),eta) ), rho);
+}
+
+__DEVICE__ float PQZCAM_to_lin(float x)
+{
+    return 10000.0f*_powf ((c1-_powf (x,1.0f/rho)) / (c3*_powf (x,1.0f/rho)-c2),1.0f/eta);
+}
+
+__DEVICE__ float3 XYZ_to_Izazbz( float3 XYZD65 )
+{
+    float3 XYZpD65 = XYZD65;
+    XYZpD65.x = cb * XYZD65.x - (cb - 1.0f) * XYZD65.z;
+    XYZpD65.y = cg * XYZD65.y - (cg - 1.0f) * XYZD65.x;
+    float3 LMS = vector_dot(ZCAM_XYZ_to_LMS, XYZpD65);
+    float3 LMSp;
+    LMSp.x = lin_to_ZCAMPQ(LMS.x);
+    LMSp.y = lin_to_ZCAMPQ(LMS.y);
+    LMSp.z = lin_to_ZCAMPQ(LMS.z);
+    float3 Izazbz = vector_dot(ZCAM_LMS_to_Izazbz, LMSp);
+    return Izazbz;
+}
+
+__DEVICE__ float3 Izazbz_to_XYZ( float3 Izazbz )
+{
+    float3 LMSp = vector_dot(invert(ZCAM_LMS_to_Izazbz), Izazbz);
+    float3 LMS;
+    LMS.x = PQZCAM_to_lin(LMSp.x);
+    LMS.y = PQZCAM_to_lin(LMSp.y);
+    LMS.z = PQZCAM_to_lin(LMSp.z);
+    float3 XYZpD65 = vector_dot(invert(ZCAM_XYZ_to_LMS), LMS);
+    float3 XYZD65 = XYZpD65;
+    XYZD65.x = (XYZpD65.x+(cb-1.0f)*XYZpD65.z)/cb;
+    XYZD65.y = (XYZpD65.y+(cg-1.0f)*XYZD65.x)/cg;
+    return XYZD65;
+}
+
+//===================================================
+//  Transform
+//===================================================
 __DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B){
     float3 white_xyY  = make_float3(white_point_x, white_point_y, white_point_luminance);
     float3 in = make_float3(p_R, p_G, p_B);
     float3 out; 
     
     if (direction == CIE_1976_LUV) {
-        in *= WHITE_SCALE;
         out = lch_to_lsh(luv_to_lch(xyz_to_luv(in, white_xyY)));
-        out.x /= WHITE_SCALE;
-        out.y /= SAT_SCALE;
-
         if(global_sat == 1){
             out.y = out.y * saturation_all * 2;
             out.x = out.x;
@@ -149,12 +233,22 @@ __DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p
             out.z = out.z;
         }
 
-        out.x *= WHITE_SCALE;
-        out.y *= SAT_SCALE;
-        out = luv_to_xyz(lch_to_luv(lsh_to_lch(out)), white_xyY);
-        out /= WHITE_SCALE;
-    } else if (direction == ZCAM_JzAzBz){
 
-    }
+        out = luv_to_xyz(lch_to_luv(lsh_to_lch(out)), white_xyY);
+    } else if (direction == ZCAM_JzAzBz){
+        out = lch_to_lsh(luv_to_lch(XYZ_to_Izazbz(in)));
+
+        if(global_sat == 1){
+            out.y = out.y * saturation_all * 2;
+            out.x = out.x;
+            out.z = out.z;
+        }else{
+            out.y = out.y * saturation_all * 2;
+            out.x = out.x;
+            out.z = out.z;
+        }
+        out = Izazbz_to_XYZ(lch_to_luv(lsh_to_lch(out)));
+        }
+    
     return out;
 }
