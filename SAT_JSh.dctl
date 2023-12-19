@@ -13,7 +13,7 @@
 
 DEFINE_UI_PARAMS(direction, Direction, DCTLUI_COMBO_BOX, 0, {ZCAM_JzAzBz, Test}, {ZCAM_JzAzBz, Test})
 DEFINE_UI_PARAMS(white_point_luminance, Luminance Adjust, DCTLUI_SLIDER_FLOAT, 0, -20, 10, 0.01)
-DEFINE_UI_PARAMS(saturation_suppression, Saturation Suppression, DCTLUI_SLIDER_FLOAT, 0, -1, 0.8, 0.01)
+DEFINE_UI_PARAMS(saturation_suppression, Saturation Suppression, DCTLUI_SLIDER_FLOAT, 0.2, -1, 0.8, 0.01)
 DEFINE_UI_PARAMS(saturation_all, Saturation, DCTLUI_SLIDER_FLOAT, 0.5, 0.0, 1.0, 0.001)
 #define PI (3.14159265358979)
 
