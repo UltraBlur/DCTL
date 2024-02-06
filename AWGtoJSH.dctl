@@ -1,0 +1,191 @@
+// @UltraBlur
+// V3.2
+
+// A tool based on the ZCAM ,transfer Arri LogCv3 to JSH of JzAzBz.
+
+// INPUT： Arri LogCv3 & Arri Wide Gamut 3
+
+DEFINE_UI_PARAMS(direction, Direction, DCTLUI_COMBO_BOX, 0, {AWG to JSH, JSH to AWG}, {Forward, Inverse})
+
+#define PI (3.14159265358979)
+
+typedef struct
+{
+    float3 r0, r1, r2;
+} mat3;
+
+__CONSTANT__ float c1 = 0.8359375f;
+__CONSTANT__ float c2 = 18.8515625f;
+__CONSTANT__ float c3 = 18.6875f;
+__CONSTANT__ float cb = 1.15f;
+__CONSTANT__ float cg = 0.66f;
+__CONSTANT__ float eta = 0.1593017578125f;
+__CONSTANT__ float rho = 134.034375f;
+__CONSTANT__ float epsilon = 3.703522621e-11f;
+
+__CONSTANT__ mat3 ZCAM_XYZ_to_LMS = {{0.41478972f, 0.579999f, 0.014648f}, {-0.20151f, 1.120649f, 0.0531008f}, {-0.0166008f, 0.2648f, 0.6684799f}};
+
+#ifdef DEVICE_IS_OPENCL
+__CONSTANT__ mat3 ZCAM_LMS_to_Izazbz = {{0.0f, 0.9999999999629647f, 0.0f}, {3.524f, -4.066708f, 0.542708f}, {0.199076f, 1.096799f, -1.295875f}};
+#endif
+
+#ifdef DEVICE_IS_CUDA
+__CONSTANT__ mat3 ZCAM_LMS_to_Izazbz = {{0.0f, 1.0f - 3.703522621e-11f, 0.0f}, {3.524f, -4.066708f, 0.542708f}, {0.199076f, 1.096799f, -1.295875f}};
+#endif
+
+#ifdef DEVICE_IS_METAL
+__CONSTANT__ mat3 ZCAM_LMS_to_Izazbz = {{0.0f, 1.0f - epsilon, 0.0f}, {3.524f, -4.066708f, 0.542708f}, {0.199076f, 1.096799f, -1.295875f}};
+#endif
+
+__DEVICE__ float3 vector_dot(mat3 m, float3 v)
+{
+    float3 result;
+
+    result.x = m.r0.x * v.x + m.r0.y * v.y + m.r0.z * v.z;
+    result.y = m.r1.x * v.x + m.r1.y * v.y + m.r1.z * v.z;
+    result.z = m.r2.x * v.x + m.r2.y * v.y + m.r2.z * v.z;
+
+    return result;
+}
+
+__DEVICE__ mat3 invert(mat3 m)
+{
+    float det = m.r0.x * (m.r1.y * m.r2.z - m.r2.y * m.r1.z) - m.r0.y * (m.r1.x * m.r2.z - m.r1.z * m.r2.x) + m.r0.z * (m.r1.x * m.r2.y - m.r1.y * m.r2.x);
+    float invdet = 1.0f / det;
+    mat3 minv;
+    minv.r0.x = (m.r1.y * m.r2.z - m.r2.y * m.r1.z) * invdet;
+    minv.r0.y = (m.r0.z * m.r2.y - m.r0.y * m.r2.z) * invdet;
+    minv.r0.z = (m.r0.y * m.r1.z - m.r0.z * m.r1.y) * invdet;
+    minv.r1.x = (m.r1.z * m.r2.x - m.r1.x * m.r2.z) * invdet;
+    minv.r1.y = (m.r0.x * m.r2.z - m.r0.z * m.r2.x) * invdet;
+    minv.r1.z = (m.r1.x * m.r0.z - m.r0.x * m.r1.z) * invdet;
+    minv.r2.x = (m.r1.x * m.r2.y - m.r2.x * m.r1.y) * invdet;
+    minv.r2.y = (m.r2.x * m.r0.y - m.r0.x * m.r2.y) * invdet;
+    minv.r2.z = (m.r0.x * m.r1.y - m.r1.x * m.r0.y) * invdet;
+    return minv;
+}
+
+__DEVICE__ float3 luv_to_lch(float3 luv)
+{
+    float cs = _hypotf(luv.y, luv.z);
+    float hs = _atan2f(luv.z, luv.y) / (2.0 * PI);
+    if (hs < 0)
+    {
+        hs += 1.0;
+    }
+    return make_float3(luv.x, cs, hs);
+}
+
+__DEVICE__ float3 Jch_to_Juv(float3 lch)
+{
+    float3 luv = lch;
+
+    luv.y = lch.y * _cosf(lch.z * 2.0 * PI);
+    luv.z = lch.y * _sinf(lch.z * 2.0 * PI);
+
+    return luv;
+}
+
+__DEVICE__ float3 Jch_to_Jsh(float3 lch)
+{
+    float s = lch.y / lch.x;
+    if (lch.x == 0.0)
+    {
+        s = 0.0;
+    }
+    return make_float3(lch.x, s, lch.z);
+}
+
+__DEVICE__ float3 Jsh_to_Jch(float3 lsh)
+{
+    float c = lsh.y * lsh.x;
+    return make_float3(lsh.x, c, lsh.z);
+}
+
+__DEVICE__ float lin_to_ZCAMPQ(float x)
+{   
+    return _powf((c1 + c2 * _powf((x / 10000.0f), eta)) / (1.0f + c3 * _powf((x / 10000.0f), eta)), rho);
+}
+
+__DEVICE__ float PQZCAM_to_lin(float x)
+{
+    
+    float out = 10000.0f * _powf((c1 - _powf(x, 1.0f / rho)) / (c3 * _powf(x, 1.0f / rho) - c2), 1.0f / eta);
+    
+    out = (out > 0.f) ? out : 0.f;
+    return out;
+}
+
+__DEVICE__ float3 XYZ_to_Izazbz(float3 XYZD65)
+{
+    // XYZ -> X'Y'Z
+    float3 XYZpD65 = XYZD65;
+    XYZpD65.x = cb * XYZD65.x - (cb - 1.0f) * XYZD65.z;
+    XYZpD65.y = cg * XYZD65.y - (cg - 1.0f) * XYZD65.x;
+
+    // X'Y'Z -> LMS
+    float3 LMS = vector_dot(ZCAM_XYZ_to_LMS, XYZpD65);
+    
+    // LMS -> L'M'S'
+    float3 LMSp;
+    LMSp.x = lin_to_ZCAMPQ(LMS.x);
+    LMSp.y = lin_to_ZCAMPQ(LMS.y);
+    LMSp.z = lin_to_ZCAMPQ(LMS.z);
+
+    // L'M'S' -> Izazbz
+    float3 Izazbz = vector_dot(ZCAM_LMS_to_Izazbz, LMSp);
+
+    // Iz to Jz
+    Izazbz.x = 0.44f * Izazbz.x / (1.0f - 0.56f * Izazbz.x) - 1.6295499532821566e-11f;
+    Izazbz.x = (Izazbz.x > 0.f) ? Izazbz.x : 0.f;
+
+    return Izazbz;
+}
+
+__DEVICE__ float3 Izazbz_to_XYZ(float3 Izazbz)
+{
+    //Jz to Iz
+    const float d = -0.56f;
+    const float d0 = 1.6295499532821566e-11f;
+    Izazbz.x += d0;
+    Izazbz.x = Izazbz.x / (1.0f + d - d * Izazbz.x);
+    Izazbz.x = (Izazbz.x > 0.f) ? Izazbz.x : 0.f;
+
+    //IzAzBz -> L'M'S'
+    float3 LMSp = vector_dot(invert(ZCAM_LMS_to_Izazbz), Izazbz);
+
+    // L'M'S' -> LMS
+    float3 LMS;
+    LMS.x = PQZCAM_to_lin(LMSp.x);
+    LMS.y = PQZCAM_to_lin(LMSp.y);
+    LMS.z = PQZCAM_to_lin(LMSp.z);
+
+    // LMS -> X'Y'Z   
+    float3 XYZpD65 = vector_dot(invert(ZCAM_XYZ_to_LMS), LMS);
+    
+    // X'Y'Z -> XYZ_D65
+    float3 XYZD65 = XYZpD65;
+    XYZD65.x = (XYZpD65.x + (cb - 1.0f) * XYZpD65.z) / cb;
+    XYZD65.y = (XYZpD65.y + (cg - 1.0f) * XYZD65.x) / cg;
+
+    return XYZD65;
+}
+
+
+__DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B) {
+	
+	float3 rgb = make_float3(p_R, p_G, p_B);
+	
+	switch (DIRECTION) {
+		case Forward:
+			rgb = rgb_inset(rgb);
+			rgb = awg_to_jsh(rgb);
+			break;
+		case Inverse:
+			rgb = jsh_to_awg(rgb);
+			rgb = rgb_outset(rgb);
+			break;
+	}
+
+	return rgb;
+}
