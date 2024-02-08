@@ -1,7 +1,7 @@
 // @UltraBlur
-// V3.2
+// V1.0
 
-// A tool based on the ZCAM ,transfer Arri LogCv3 to JSH of JzAzBz.
+// A tool based on the ZCAM ,transfer Arri LogCv3 to JSH of ZCAM JzAzBz.
 
 // INPUT： Arri LogCv3 & Arri Wide Gamut 3
 
@@ -171,6 +171,15 @@ __DEVICE__ float3 Izazbz_to_XYZ(float3 Izazbz)
     return XYZD65;
 }
 
+__DEVICE__ float3 awg_to_jsh(float3 rgb)
+{
+    // ALEXA Wide Gamut RGB To CIE 1931 XYZ
+    const float rawg = (rgb.x * 0.63800764f) + (rgb.y * 0.21470386f) + (rgb.z * 0.09774445f);
+    const float gawg = (rgb.x * 0.29195377f) + (rgb.y * 0.82384104f) + (rgb.z * -0.11579482f);
+    const float bawg = (rgb.x * 0.00279827f) + (rgb.y * -0.06703423f) + (rgb.z * 1.15329373f);
+
+    
+}
 
 __DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B) {
 	

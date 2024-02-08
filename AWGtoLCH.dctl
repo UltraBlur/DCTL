@@ -16,9 +16,10 @@
 	Thanks a lot to Jan Karow who provided me with the inset & outset idea for avoiding negative values on the blue
 	channel, sourced from Troy Sobotka: https://github.com/sobotka/SB2383-Configuration-Generation 
 */
-
 DEFINE_UI_PARAMS(DIRECTION, Direction, DCTLUI_COMBO_BOX, 0, {Forward, Inverse}, {AWG to OKLAB, OKLAB to AWG})
-DEFINE_UI_PARAMS(scale_ab, ScaleAB, DCTLUI_SLIDER_FLOAT, 8, 5, 12, 0.5)
+
+
+#define PI (3.14159265358979)
 
 __DEVICE__ float3 rgb_inset (float3 rgb) {
 
@@ -50,8 +51,28 @@ return cube_root;
 
 }
 
+__DEVICE__ float3 lab_to_lch(float3 lab)
+{
+    float cs = _hypotf(lab.y, lab.z);
+    float hs = _atan2f(lab.z, lab.y) / (2.0 * PI);
+    if (hs < 0)
+    {
+        hs += 1.0;
+    }
+    return make_float3(lab.x, cs, hs);
+}
 
-__DEVICE__ float3 awg_to_oklab(float3 rgb, float scale_ab) {
+__DEVICE__ float3 lch_to_lab(float3 lch)
+{
+    float3 lab = lch;
+
+    lab.y = lch.y * _cosf(lch.z * 2.0 * PI);
+    lab.z = lch.y * _sinf(lch.z * 2.0 * PI);
+
+    return lab;
+}
+
+__DEVICE__ float3 awg_to_oklab(float3 rgb) {
 	
 	// ALEXA Wide Gamut RGB To CIE 1931 XYZ
 		const float rawg = (rgb.x * 0.63800764f) + (rgb.y * 0.21470386f) + (rgb.z * 0.09774445f);
@@ -73,23 +94,18 @@ __DEVICE__ float3 awg_to_oklab(float3 rgb, float scale_ab) {
 		const float a_lab = (l_prime * 1.9779984951f) + (m_prime * -2.4285922050f) + (s_prime * 0.4505937099f);
 		const float b_lab = (l_prime * 0.0259040371f) + (m_prime * 0.7827717662f) + (s_prime * -0.8086757660f);
 
-        const float a_lab_adjust = a_lab * scale_ab + 0.5f;
-		const float b_lab_adjust = b_lab * scale_ab + 0.5f;
 
-		return make_float3(l_lab, a_lab_adjust, b_lab_adjust);
+		return make_float3(l_lab, a_lab, b_lab);
 		
 	}
 	
 	
-__DEVICE__ float3 oklab_to_awg(float3 lab, float scale_ab) {
-
-    const float lab_a = (lab.y - 0.5f) / scale_ab;
-    const float lab_b = (lab.z - 0.5f) / scale_ab;
+__DEVICE__ float3 oklab_to_awg(float3 lab) {
 
 // OKLAB To LMS Non-Linearity 
-	const float l_prime = (lab.x * 1.00000000f) + (lab_a * 0.39633784f) + (lab_b * 0.21580376f);
-	const float m_prime = (lab.x * 1.00000000f) + (lab_a * -0.10556135f) + (lab_b * -0.06385418f);
-	const float s_prime = (lab.x * 1.00000000f) + (lab_a * -0.08948418f) + (lab_b * -1.29148555f);
+	const float l_prime = (lab.x * 1.00000000f) + (lab.y * 0.39633784f) + (lab.z * 0.21580376f);
+	const float m_prime = (lab.x * 1.00000000f) + (lab.y * -0.10556135f) + (lab.z * -0.06385418f);
+	const float s_prime = (lab.x * 1.00000000f) + (lab.y * -0.08948418f) + (lab.z * -1.29148555f);
 	
 // LMS Non-Linearity To LMS
 	const float l = _copysignf(_powf(fabs(l_prime),3), l_prime);
@@ -119,15 +135,13 @@ __DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p
 	switch (DIRECTION) {
 		case Forward:
 			rgb = rgb_inset(rgb);
-			rgb = awg_to_oklab(rgb, scale_ab);
+			rgb = lab_to_lch(awg_to_oklab(rgb));
 			break;
 		case Inverse:
-			rgb = oklab_to_awg(rgb, scale_ab);
+			rgb = oklab_to_awg(lch_to_lab(rgb));
 			rgb = rgb_outset(rgb);
 			break;
 	}
 
 	return rgb;
 }
-	
-	
