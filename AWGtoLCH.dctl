@@ -1,5 +1,5 @@
 /*
-@UltraBlur V1.0
+@UltraBlur V1.1
 
 	Original Written by Nico Wieseneder, www.demystify-color.com
 	
@@ -53,7 +53,7 @@ return cube_root;
 
 __DEVICE__ float3 lab_to_lch(float3 lab)
 {
-    float cs = _hypotf(lab.y, lab.z);
+    float cs = _hypotf(lab.y, lab.z) * 10;
     float hs = _atan2f(lab.z, lab.y) / (2.0 * PI);
     if (hs < 0)
     {
@@ -66,8 +66,8 @@ __DEVICE__ float3 lch_to_lab(float3 lch)
 {
     float3 lab = lch;
 
-    lab.y = lch.y * _cosf(lch.z * 2.0 * PI);
-    lab.z = lch.y * _sinf(lch.z * 2.0 * PI);
+    lab.y = (lch.y / 10 )* _cosf(lch.z * 2.0 * PI);
+    lab.z = (lch.y / 10 )* _sinf(lch.z * 2.0 * PI);
 
     return lab;
 }
