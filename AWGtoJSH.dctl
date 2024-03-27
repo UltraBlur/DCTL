@@ -1,11 +1,11 @@
 // @UltraBlur
-// V1.0
+// V1.2 240328
 
 // A tool based on the ZCAM ,transfer Arri LogCv3 to JSH of ZCAM JzAzBz.
 
 // INPUT： Arri LogCv3 & Arri Wide Gamut 3
 
-DEFINE_UI_PARAMS(direction, Direction, DCTLUI_COMBO_BOX, 0, {AWG to JSH, JSH to AWG}, {Forward, Inverse})
+DEFINE_UI_PARAMS(DIRECTION, Direction, DCTLUI_COMBO_BOX, 0, {Forward, Inverse}, {AWG to JSH, JSH to AWG})
 
 #define PI (3.14159265358979)
 
@@ -25,6 +25,8 @@ __CONSTANT__ float epsilon = 3.703522621e-11f;
 
 __CONSTANT__ mat3 ZCAM_XYZ_to_LMS = {{0.41478972f, 0.579999f, 0.014648f}, {-0.20151f, 1.120649f, 0.0531008f}, {-0.0166008f, 0.2648f, 0.6684799f}};
 
+__CONSTANT__ mat3 AWG_to_XYZ = {{0.63800764f, 0.21470386f, 0.09774445f}, {0.29195377f, 0.82384104f, -0.11579482f}, { 0.00279827f, -0.06703423f, 1.15329373f}};
+
 #ifdef DEVICE_IS_OPENCL
 __CONSTANT__ mat3 ZCAM_LMS_to_Izazbz = {{0.0f, 0.9999999999629647f, 0.0f}, {3.524f, -4.066708f, 0.542708f}, {0.199076f, 1.096799f, -1.295875f}};
 #endif
@@ -36,6 +38,8 @@ __CONSTANT__ mat3 ZCAM_LMS_to_Izazbz = {{0.0f, 1.0f - 3.703522621e-11f, 0.0f}, {
 #ifdef DEVICE_IS_METAL
 __CONSTANT__ mat3 ZCAM_LMS_to_Izazbz = {{0.0f, 1.0f - epsilon, 0.0f}, {3.524f, -4.066708f, 0.542708f}, {0.199076f, 1.096799f, -1.295875f}};
 #endif
+
+
 
 __DEVICE__ float3 vector_dot(mat3 m, float3 v)
 {
@@ -65,41 +69,28 @@ __DEVICE__ mat3 invert(mat3 m)
     return minv;
 }
 
-__DEVICE__ float3 luv_to_lch(float3 luv)
+__DEVICE__ float3 JzAzBz_to_Jch(float3 IzAzBz)
 {
-    float cs = _hypotf(luv.y, luv.z);
-    float hs = _atan2f(luv.z, luv.y) / (2.0 * PI);
+    float cs = _hypotf(IzAzBz.y, IzAzBz.z);
+    float hs = _atan2f(IzAzBz.z, IzAzBz.y) / (2.0 * PI);
     if (hs < 0)
     {
         hs += 1.0;
     }
-    return make_float3(luv.x, cs, hs);
+    return make_float3(IzAzBz.x, cs, hs);
 }
 
-__DEVICE__ float3 Jch_to_Juv(float3 lch)
+__DEVICE__ float3 Jch_to_JzAzBz(float3 Jch)
 {
-    float3 luv = lch;
-
+    float3 lch = Jch;
+   
+    float3 luv;
     luv.y = lch.y * _cosf(lch.z * 2.0 * PI);
     luv.z = lch.y * _sinf(lch.z * 2.0 * PI);
 
+    luv.x = lch.x;
+    
     return luv;
-}
-
-__DEVICE__ float3 Jch_to_Jsh(float3 lch)
-{
-    float s = lch.y / lch.x;
-    if (lch.x == 0.0)
-    {
-        s = 0.0;
-    }
-    return make_float3(lch.x, s, lch.z);
-}
-
-__DEVICE__ float3 Jsh_to_Jch(float3 lsh)
-{
-    float c = lsh.y * lsh.x;
-    return make_float3(lsh.x, c, lsh.z);
 }
 
 __DEVICE__ float lin_to_ZCAMPQ(float x)
@@ -116,7 +107,61 @@ __DEVICE__ float PQZCAM_to_lin(float x)
     return out;
 }
 
-__DEVICE__ float3 XYZ_to_Izazbz(float3 XYZD65)
+__DEVICE__ float3 Jch_to_Jsh(float3 jch)
+{
+
+    float s = (jch.y/10)/jch.x;
+    if (jch.x == 0.0)
+    {
+        s = 0.0;
+    }
+    return make_float3(jch.x, s, jch.z);
+}
+
+__DEVICE__ float3 Jsh_to_Jch(float3 jsh)
+{
+    float c = jsh.y * jsh.x * 10;
+    return make_float3(jsh.x, c, jsh.z);
+}
+
+// LogC
+
+__DEVICE__ float logc_2_lin(float in)
+{
+	float out = in > 0.1496582f ? (_powf(10.0f, (in - 0.385537f) / 0.2471896f) - 0.052272f) / 5.555556f : (in - 0.092809f) / 5.367655f;
+	return out;
+}
+
+__DEVICE__ float3 logC_to_lin(float3 in)
+{
+	float3 out;
+	
+	out.x = logc_2_lin(in.x);
+	out.y = logc_2_lin(in.y);
+	out.z = logc_2_lin(in.z);
+	
+	return out;
+}
+
+__DEVICE__ float lin_2_logc(float in)
+{
+	float out = in > 0.010591f ? 0.24719f * _log10f(5.555556f * in + 0.052272f) + 0.385537f : 5.367655f * in + 0.092809f;
+	return out;
+}
+
+__DEVICE__ float3 lin_to_logC(float3 in)
+{
+	float3 out;
+	
+	out.x = lin_2_logc(in.x);
+	out.y = lin_2_logc(in.y);
+	out.z = lin_2_logc(in.z);
+	
+	return out;
+}
+
+
+__DEVICE__ float3 XYZ_to_Jzazbz(float3 XYZD65)
 {
     // XYZ -> X'Y'Z
     float3 XYZpD65 = XYZD65;
@@ -142,7 +187,7 @@ __DEVICE__ float3 XYZ_to_Izazbz(float3 XYZD65)
     return Izazbz;
 }
 
-__DEVICE__ float3 Izazbz_to_XYZ(float3 Izazbz)
+__DEVICE__ float3 Jzazbz_to_XYZ(float3 Izazbz)
 {
     //Jz to Iz
     const float d = -0.56f;
@@ -171,28 +216,56 @@ __DEVICE__ float3 Izazbz_to_XYZ(float3 Izazbz)
     return XYZD65;
 }
 
-__DEVICE__ float3 awg_to_jsh(float3 rgb)
+__DEVICE__ float3 awg_to_jch(float3 rgb)
 {
-    // ALEXA Wide Gamut RGB To CIE 1931 XYZ
-    const float rawg = (rgb.x * 0.63800764f) + (rgb.y * 0.21470386f) + (rgb.z * 0.09774445f);
-    const float gawg = (rgb.x * 0.29195377f) + (rgb.y * 0.82384104f) + (rgb.z * -0.11579482f);
-    const float bawg = (rgb.x * 0.00279827f) + (rgb.y * -0.06703423f) + (rgb.z * 1.15329373f);
+    // Arri LogCv3 to Linear
+    const float3 lin = logC_to_lin(rgb);
 
+    // ALEXA Wide Gamut RGB To CIE 1931 XYZ
+    const float3 xyz = vector_dot(AWG_to_XYZ, lin);
     
+    // CIE 1931 XYZ To Jzazbz
+    const float3 Jzazbz = XYZ_to_Jzazbz(xyz);
+    
+    //JzAzBz To JCH
+    float3 jch = JzAzBz_to_Jch(Jzazbz);
+
+    float3 jsh = Jch_to_Jsh(jch);
+
+    return jsh;
+
 }
 
-__DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B) {
+__DEVICE__ float3 jch_to_awg(float3 rgb)
+{
+
+    float3 jch = Jsh_to_Jch(rgb);
+    // JCH To JzAzBz 
+    const float3 Jzazbz = Jch_to_JzAzBz(jch);
+   
+    // Jzazbz To CIE 1931 XYZ
+    const float3 xyz = Jzazbz_to_XYZ(Jzazbz);
+
+    // CIE 1931 XYZ To ALEXA Wide Gamut RGB 
+    const float3 awg = vector_dot(invert(AWG_to_XYZ), xyz);
+    
+    // Linear to Arri LogCv3
+    const float3 logc = lin_to_logC(awg);
+
+    return logc;
+}
+
+__DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B) 
+{
 	
 	float3 rgb = make_float3(p_R, p_G, p_B);
 	
 	switch (DIRECTION) {
 		case Forward:
-			rgb = rgb_inset(rgb);
-			rgb = awg_to_jsh(rgb);
+			rgb = awg_to_jch(rgb);
 			break;
 		case Inverse:
-			rgb = jsh_to_awg(rgb);
-			rgb = rgb_outset(rgb);
+			rgb = jch_to_awg(rgb);
 			break;
 	}
 

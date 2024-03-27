@@ -1,0 +1,106 @@
+/*
+@UltraBlur V1.0
+XYZ to OKLCH
+*/
+DEFINE_UI_PARAMS(DIRECTION, Direction, DCTLUI_COMBO_BOX, 0, {Forward, Inverse}, {AWG to OKLAB, OKLAB to AWG})
+
+
+#define PI (3.14159265358979)
+	
+
+__DEVICE__ float cbrtf(float x, float cube_root) {
+
+	if (x < 0.0f){
+	x = _fabs(x);
+	cube_root = _powf(x, 1.0f/3.0f)*(-1.0f);
+	} else cube_root = _powf(x, 1.0f/3.0f);
+	
+return cube_root;
+
+}
+
+__DEVICE__ float3 lab_to_lch(float3 lab)
+{
+    float cs = _hypotf(lab.y, lab.z) * 10;
+    float hs = _atan2f(lab.z, lab.y) / (2.0 * PI);
+    if (hs < 0)
+    {
+        hs += 1.0;
+    }
+    return make_float3(lab.x, cs, hs);
+}
+
+__DEVICE__ float3 lch_to_lab(float3 lch)
+{
+    float3 lab = lch;
+
+    lab.y = (lch.y / 10 )* _cosf(lch.z * 2.0 * PI);
+    lab.z = (lch.y / 10 )* _sinf(lch.z * 2.0 * PI);
+
+    return lab;
+}
+
+__DEVICE__ float3 awg_to_oklab(float3 rgb) {
+	
+	
+
+	// CIE 1931 XYZ To LMS
+		const float l = (rgb.x * 0.8189330101f) + (rgb.y * 0.3618667424f) + (rgb.z * -0.1288597137f);
+		const float m = (rgb.x * 0.0329845436f) + (rgb.y * 0.9293118715f) + (rgb.z * 0.0361456387f);
+		const float s = (rgb.x * 0.0482003018f) + (rgb.y * 0.2643662691f) + (rgb.z * 0.6338517070f);
+			
+	// LMS Non-Linearity 	
+		const float l_prime = cbrtf(l,0.0f);	
+		const float m_prime = cbrtf(m,0.0f);	
+		const float s_prime = cbrtf(s,0.0f);
+
+	// LMS Non-Linearity To OKLAB
+		const float l_lab = (l_prime * 0.2104542553f) + (m_prime * 0.7936177850f) + (s_prime * -0.0040720468f);
+		const float a_lab = (l_prime * 1.9779984951f) + (m_prime * -2.4285922050f) + (s_prime * 0.4505937099f);
+		const float b_lab = (l_prime * 0.0259040371f) + (m_prime * 0.7827717662f) + (s_prime * -0.8086757660f);
+
+
+		return make_float3(l_lab, a_lab, b_lab);
+		
+	}
+	
+	
+__DEVICE__ float3 oklab_to_awg(float3 lab) {
+
+// OKLAB To LMS Non-Linearity 
+	const float l_prime = (lab.x * 1.00000000f) + (lab.y * 0.39633784f) + (lab.z * 0.21580376f);
+	const float m_prime = (lab.x * 1.00000000f) + (lab.y * -0.10556135f) + (lab.z * -0.06385418f);
+	const float s_prime = (lab.x * 1.00000000f) + (lab.y * -0.08948418f) + (lab.z * -1.29148555f);
+	
+// LMS Non-Linearity To LMS
+	const float l = _copysignf(_powf(fabs(l_prime),3), l_prime);
+	const float m = _copysignf(_powf(fabs(m_prime),3), m_prime);
+	const float s = _copysignf(_powf(fabs(s_prime),3), s_prime);
+	
+// LMS To CIE 1931 XYZ  
+	const float r = (l * 1.2270138511f) + (m * -0.55779998065f) + (s * 0.2812561489f);
+	const float g = (l * -0.0405801784f) + (m * 1.1122568696f) + (s * -0.0716766786f);
+	const float b = (l * -0.0763812845f) + (m * -0.4214819784f) + (s * 1.5861632204f);
+		
+	
+	return make_float3(r, g, b);
+}
+		
+		
+
+		
+__DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B) {
+	
+	float3 rgb = make_float3(p_R, p_G, p_B);
+	
+	switch (DIRECTION) {
+		case Forward:
+			rgb = lab_to_lch(awg_to_oklab(rgb));
+			break;
+		case Inverse:
+			rgb = oklab_to_awg(lch_to_lab(rgb));
+			break;
+	}
+
+	return rgb;
+}

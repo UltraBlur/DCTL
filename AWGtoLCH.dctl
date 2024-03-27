@@ -15,6 +15,7 @@
 	
 	Thanks a lot to Jan Karow who provided me with the inset & outset idea for avoiding negative values on the blue
 	channel, sourced from Troy Sobotka: https://github.com/sobotka/SB2383-Configuration-Generation 
+
 */
 DEFINE_UI_PARAMS(DIRECTION, Direction, DCTLUI_COMBO_BOX, 0, {Forward, Inverse}, {AWG to OKLAB, OKLAB to AWG})
 
@@ -27,7 +28,6 @@ __DEVICE__ float3 rgb_inset (float3 rgb) {
 	const float g_inset = rgb.x * 0.07272987026297614f + rgb.y * 0.8387515418967071f + rgb.z * 0.08851798996797691f;
 	const float b_inset = rgb.x * 0.07272966839689886f + rgb.y * 0.07575121559727113f + rgb.z * 0.8515177877383528f;
 	return make_float3(r_inset, g_inset, b_inset);
-	
     }		
 	
 __DEVICE__ float3 rgb_outset (float3 rgb) {
@@ -97,7 +97,7 @@ __DEVICE__ float3 awg_to_oklab(float3 rgb) {
 
 		return make_float3(l_lab, a_lab, b_lab);
 		
-	}
+}
 	
 	
 __DEVICE__ float3 oklab_to_awg(float3 lab) {
@@ -134,12 +134,12 @@ __DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p
 	
 	switch (DIRECTION) {
 		case Forward:
-			rgb = rgb_inset(rgb);
+			//rgb = rgb_inset(rgb);
 			rgb = lab_to_lch(awg_to_oklab(rgb));
 			break;
 		case Inverse:
 			rgb = oklab_to_awg(lch_to_lab(rgb));
-			rgb = rgb_outset(rgb);
+			//rgb = rgb_outset(rgb);
 			break;
 	}
 
