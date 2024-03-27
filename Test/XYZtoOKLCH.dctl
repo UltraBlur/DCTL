@@ -7,6 +7,42 @@ DEFINE_UI_PARAMS(DIRECTION, Direction, DCTLUI_COMBO_BOX, 0, {Forward, Inverse}, 
 
 #define PI (3.14159265358979)
 	
+// LogC
+
+__DEVICE__ float logc_2_lin(float in)
+{
+	float out = in > 0.1496582f ? (_powf(10.0f, (in - 0.385537f) / 0.2471896f) - 0.052272f) / 5.555556f : (in - 0.092809f) / 5.367655f;
+	return out;
+}
+
+__DEVICE__ float3 logC_to_lin(float3 in)
+{
+	float3 out;
+	
+	out.x = logc_2_lin(in.x);
+	out.y = logc_2_lin(in.y);
+	out.z = logc_2_lin(in.z);
+	
+	return out;
+}
+
+__DEVICE__ float lin_2_logc(float in)
+{
+	float out = in > 0.010591f ? 0.24719f * _log10f(5.555556f * in + 0.052272f) + 0.385537f : 5.367655f * in + 0.092809f;
+	return out;
+}
+
+__DEVICE__ float3 lin_to_logC(float3 in)
+{
+	float3 out;
+	
+	out.x = lin_2_logc(in.x);
+	out.y = lin_2_logc(in.y);
+	out.z = lin_2_logc(in.z);
+	
+	return out;
+}
+
 
 __DEVICE__ float cbrtf(float x, float cube_root) {
 
@@ -42,12 +78,13 @@ __DEVICE__ float3 lch_to_lab(float3 lch)
 
 __DEVICE__ float3 awg_to_oklab(float3 rgb) {
 	
-	
+		const float3 lin = logC_to_lin(rgb);
+
 
 	// CIE 1931 XYZ To LMS
-		const float l = (rgb.x * 0.8189330101f) + (rgb.y * 0.3618667424f) + (rgb.z * -0.1288597137f);
-		const float m = (rgb.x * 0.0329845436f) + (rgb.y * 0.9293118715f) + (rgb.z * 0.0361456387f);
-		const float s = (rgb.x * 0.0482003018f) + (rgb.y * 0.2643662691f) + (rgb.z * 0.6338517070f);
+		const float l = (lin.x * 0.8189330101f) + (lin.y * 0.3618667424f) + (lin.z * -0.1288597137f);
+		const float m = (lin.x * 0.0329845436f) + (lin.y * 0.9293118715f) + (lin.z * 0.0361456387f);
+		const float s = (lin.x * 0.0482003018f) + (lin.y * 0.2643662691f) + (lin.z * 0.6338517070f);
 			
 	// LMS Non-Linearity 	
 		const float l_prime = cbrtf(l,0.0f);	
@@ -81,9 +118,11 @@ __DEVICE__ float3 oklab_to_awg(float3 lab) {
 	const float r = (l * 1.2270138511f) + (m * -0.55779998065f) + (s * 0.2812561489f);
 	const float g = (l * -0.0405801784f) + (m * 1.1122568696f) + (s * -0.0716766786f);
 	const float b = (l * -0.0763812845f) + (m * -0.4214819784f) + (s * 1.5861632204f);
-		
 	
-	return make_float3(r, g, b);
+	const float lin = make_float3(r, g, b)
+	const float3 logc = lin_to_logC(lin);
+
+	return logc;
 }
 		
 		
