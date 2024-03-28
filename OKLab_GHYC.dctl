@@ -1,6 +1,7 @@
 /*
-@UltraBlur V1.0
-
+	@UltraBlur V1.0
+	Added scaling slider for AB components
+	
 	Original Written by Nico Wieseneder, www.demystify-color.com
 	
 	Original C++ code by Björn Ottosson https://bottosson.github.io/posts/oklab/
@@ -129,5 +130,3 @@ __DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p
 
 	return rgb;
 }
-	
-	
