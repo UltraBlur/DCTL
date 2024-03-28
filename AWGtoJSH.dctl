@@ -115,11 +115,13 @@ __DEVICE__ float3 Jch_to_Jsh(float3 jch)
     {
         s = 0.0;
     }
+    jch.x = jch.x * 25;
     return make_float3(jch.x, s, jch.z);
 }
 
 __DEVICE__ float3 Jsh_to_Jch(float3 jsh)
 {
+    jsh.x = jsh.x / 25;
     float c = jsh.y * jsh.x * 10;
     return make_float3(jsh.x, c, jsh.z);
 }
@@ -230,6 +232,7 @@ __DEVICE__ float3 awg_to_jch(float3 rgb)
     //JzAzBz To JCH
     float3 jch = JzAzBz_to_Jch(Jzazbz);
 
+    //Jz Chroma Hue to Jz Saturation Hue
     float3 jsh = Jch_to_Jsh(jch);
 
     return jsh;
@@ -238,7 +241,7 @@ __DEVICE__ float3 awg_to_jch(float3 rgb)
 
 __DEVICE__ float3 jch_to_awg(float3 rgb)
 {
-
+    // Jz Saturation Hue to Jz Chroma Hue
     float3 jch = Jsh_to_Jch(rgb);
     // JCH To JzAzBz 
     const float3 Jzazbz = Jch_to_JzAzBz(jch);
