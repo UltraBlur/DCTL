@@ -1,5 +1,5 @@
 // @UltraBlur
-// V1.2 240328
+// V1.3 240409
 
 // A tool based on the ZCAM ,transfer Arri LogCv3 to JSH of ZCAM JzAzBz.
 
@@ -102,7 +102,6 @@ __DEVICE__ float PQZCAM_to_lin(float x)
 {
     
     float out = 10000.0f * _powf((c1 - _powf(x, 1.0f / rho)) / (c3 * _powf(x, 1.0f / rho) - c2), 1.0f / eta);
-    
     out = (out > 0.f) ? out : 0.f;
     return out;
 }
@@ -148,7 +147,8 @@ __DEVICE__ float3 logC_to_lin(float3 in)
 __DEVICE__ float lin_2_logc(float in)
 {
 	float out = in > 0.010591f ? 0.24719f * _log10f(5.555556f * in + 0.052272f) + 0.385537f : 5.367655f * in + 0.092809f;
-	return out;
+    out = (out > 0.f) ? out : 0.f;
+    return out;
 }
 
 __DEVICE__ float3 lin_to_logC(float3 in)
@@ -234,6 +234,10 @@ __DEVICE__ float3 awg_to_jch(float3 rgb)
 
     //Jz Chroma Hue to Jz Saturation Hue
     float3 jsh = Jch_to_Jsh(jch);
+
+    jsh.x = (jsh.x > 0.f) ? jsh.x : 0.f;
+    jsh.y = (jsh.y > 0.f) ? jsh.y : 0.f;
+    jsh.z = (jsh.z > 0.f) ? jsh.z : 0.f;
 
     return jsh;
 
