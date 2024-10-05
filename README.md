@@ -10,7 +10,7 @@ Added additional scaling of the J and S components to facilitate adjustments wit
 >
 > Base on ZCAM color appearance model by Muhammad Safdar, Jon Yngve Harderberg, and Ming Ronnier Luo.
 
-###### How To Use?
+#### How To Use?
 
 AWG_To_JSH provided a easy way for look development. Using AWGtoJSH 3x3.drx. Just like using vs curve in Resolve.
 
@@ -18,7 +18,8 @@ AWG_To_JSH provided a easy way for look development. Using AWGtoJSH 3x3.drx. Jus
 
 Or, you can simply split it into just the J C H channels for adjustment.
 
-![1711622105205](image/README/1711622105205.png)OKLab_GHYC
+![1711622105205](image/README/1711622105205.png)
+## OKLab_GHYC
 
     Added scaling slider for A, B components.
 
@@ -44,7 +45,7 @@ Saturation Suppression: Analogous to the Lift Gamma Gain color wheel, if you thi
 >
 > Base on ZCAM color appearance model by Muhammad Safdar, Jon Yngve Harderberg, and Ming Ronnier Luo.
 
-## Test
+## Testing:
 
 ### XYZtoOKLCH
 
