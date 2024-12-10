@@ -1,4 +1,4 @@
-// NAMICOLOR-GHYC 1.0
+// NAMICOLOR-GHYC 1.1
 
 // Based on Namicolor-dev by Wavechaser
 // Original concept by HikariDragon, currently maintained by Wavechaser. 
@@ -18,7 +18,7 @@ DEFINE_UI_PARAMS(inputType,     Input Type,         DCTLUI_COMBO_BOX,       0, {
 DEFINE_UI_PARAMS(inputEOTF,     Input Gamma,        DCTLUI_COMBO_BOX,       0, {lin, gamma}, {Linear, Gamma 2.2})
 
 // Input color space
-DEFINE_UI_PARAMS(inputColor,    Input Color Space,  DCTLUI_COMBO_BOX,       0, {AdobeRGB, ProPhotoRGB, P3D60, bypass}, {Adobe RGB, ProPhoto RGB (D65), P3D60, P3Bypass})
+DEFINE_UI_PARAMS(inputColor,    Input Color Space,  DCTLUI_COMBO_BOX,       3, {AdobeRGB, ProPhotoRGB, P3D60, bypass}, {Adobe RGB, ProPhoto RGB (D65), P3D60, Bypass})
 
 // Range control
 DEFINE_UI_PARAMS(inputGain,     Input Gain, 	    DCTLUI_SLIDER_FLOAT, 	1.0,  0.0, 2.0, 0.020)
